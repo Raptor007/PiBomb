@@ -35,6 +35,8 @@ Keyboard::Keyboard( void )
 	KeyMap[ KEY_9 ] = '9';
 	KeyMap[ KEY_ENTER ] = 13;
 	KeyMap[ KEY_KPENTER ] = 13;
+	KeyMap[ KEY_KPMINUS ] = '-';
+	KeyMap[ KEY_KPPLUS ] = '+';
 	KeyMap[ KEY_Q ] = 'q';
 	KeyMap[ KEY_GRAVE ] = '`';
 }

@@ -119,6 +119,16 @@ int main( int argc, char **argv )
 							break;
 						}
 					}
+					else if( key == '-' )
+					{
+						system( "/usr/bin/amixer set PCM 6dB-" );
+						sound.Play( "c4_explode1.wav" );
+					}
+					else if( key == '+' )
+					{
+						system( "/usr/bin/amixer set PCM 6dB+" );
+						sound.Play( "c4_explode1.wav" );
+					}
 				}
 			}
 		}

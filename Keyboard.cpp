@@ -36,9 +36,16 @@ Keyboard::Keyboard( void )
 	KeyMap[ KEY_ENTER ] = 13;
 	KeyMap[ KEY_KPENTER ] = 13;
 	KeyMap[ KEY_KPMINUS ] = '-';
+	KeyMap[ KEY_MINUS ] = '-';
 	KeyMap[ KEY_KPPLUS ] = '+';
-	KeyMap[ KEY_Q ] = 'q';
+	KeyMap[ KEY_EQUAL ] = '=';
+	KeyMap[ KEY_KPSLASH ] = '/';
+	KeyMap[ KEY_KPASTERISK ] = '*';
+	KeyMap[ KEY_KPEQUAL ] = '=';
+	KeyMap[ KEY_KPDOT ] = '.';
+	KeyMap[ KEY_TAB ] = '\t';
 	KeyMap[ KEY_GRAVE ] = '`';
+	KeyMap[ KEY_Q ] = 'q';
 }
 
 Keyboard::~Keyboard()
@@ -108,7 +115,11 @@ std::deque<char> Keyboard::GetEvents( void )
 			event = (event & 0x80) | KeyMap[ event & 0x7F ];
 		
 		// We'll return a list of all the raw up/down events.
-		events.push_back( event );
+		// To avoid keyboard repeat, don't return key-down events for keys already held down.
+		// This code works because KeyDown(event) will always be false for a key-up event,
+		// but it might be more efficient to check event & 0x80 separately before KeyDown.
+		if( ! KeyDown(event) )
+			events.push_back( event );
 		
 		// The highest bit set means the key was released.
 		if( event & 0x80 )

@@ -66,6 +66,10 @@ void Sound::PlayLater( std::string filename, double secs, double volume )
 
 void Sound::Update( void )
 {
+	// If we have no playing or queued sounds, there's no need to do anything.
+	if( Playing.empty() )
+		return;
+	
 	memset( Buffer, 0, BufferSize );
 	
 	// Fill the output buffer with mixed audio from all playing samples.

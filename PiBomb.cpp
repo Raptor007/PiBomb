@@ -47,7 +47,6 @@ int main( int argc, char **argv )
 	bool planted = false;
 	bool need_planted_message = false;
 	bool defusing = false;
-	bool defusing_test = false;
 	char digits[ PLANT_DIGITS + 1 ] = "";
 	double planted_for = 0.;
 	double defusing_for = 0.;
@@ -104,7 +103,7 @@ int main( int argc, char **argv )
 						if( len < PLANT_DIGITS )
 						{
 							// Prompt for more digits.
-							snprintf( str, 21, " Type %i more digit%c", PLANT_DIGITS - len, (PLANT_DIGITS - len == 1) ? ' ' : 's' );
+							snprintf( str, 21, " Type %u more digit%c", (unsigned int)( PLANT_DIGITS - len ), (PLANT_DIGITS - len == 1) ? ' ' : 's' );
 							lcd.SetText( 1, str );
 						}
 						else
@@ -174,9 +173,7 @@ int main( int argc, char **argv )
 			}
 			
 			bool was_defusing = defusing;
-			if( key_events.size() && (key_events.front() == '`') )
-				defusing_test = ! defusing_test;
-			defusing = (defusing_test || keyboard.KeyDown(13));
+			defusing = keyboard.KeyDown(13);
 			
 			if( defusing )
 			{
@@ -217,8 +214,20 @@ int main( int argc, char **argv )
 			}
 		}
 		
-		if( keyboard.KeyDown('q') || keyboard.KeyDown('\t') )
+		// Hold "Q" or ". tab" to quit.
+		if( keyboard.KeyDown('q') || (keyboard.KeyDown('.') && keyboard.KeyDown('\t')) )
 			running = false;
+		
+		// Hold ". /" to quit and shutdown.
+		else if( keyboard.KeyDown('.') && keyboard.KeyDown('/') )
+		{
+			running = false;
+			
+			if( getuid() == 0 )
+				system( "/sbin/shutdown -h now" );
+			else
+				system( "sudo /sbin/shutdown -h now" );
+		}
 		
 		usleep( 50 * 1000 );
 		if( planted )

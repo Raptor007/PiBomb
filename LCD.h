@@ -1,6 +1,6 @@
 extern "C"
 {
-#include <picolcd.h>
+#include "picolcd.h"
 }
 
 class LCD

@@ -12,14 +12,19 @@ extern "C"
 #include <alsa/asoundlib.h>
 }
 
+#define SOUND_BUFFER_SIZE 8192
+
 class Sound
 {
 public:
+	static const snd_pcm_uframes_t BufferSize = 8192;
+	
 	snd_pcm_t *PCMHandle;
 	snd_pcm_hw_params_t *Params;
 	unsigned int Rate, Channels;
-	snd_pcm_uframes_t BufferFrames, BufferSize;
-	void *Buffer;
+	snd_pcm_uframes_t BufferFrames;
+	uint8_t Buffer[ BufferSize ];
+	size_t PreBufferedFrames;
 	
 	std::map<std::string,SoundSample*> Loaded;
 	std::list<PlayingSound> Playing;
@@ -40,7 +45,7 @@ class SoundSample
 {
 public:
 	unsigned int ByteDepth, Rate, Channels;
-	size_t Frames;
+	size_t Frames, DataSize;
 	void *Data;
 	
 	SoundSample( std::string filename );

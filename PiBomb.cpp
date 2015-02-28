@@ -1,6 +1,7 @@
 #include <cmath>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/mman.h>
 #include "LCD.h"
 #include "Sound.h"
 #include "Keyboard.h"
@@ -55,6 +56,9 @@ int main( int argc, char **argv )
 	
 	// Initialize keyboard.
 	keyboard.Start();
+	
+	// Prevent any of this program's memory from being swapped to the SD card.
+	mlockall( MCL_CURRENT | MCL_FUTURE );
 	
 	// Ready to start.
 	lcd.SetText( 1, "Type digits to plant" );
@@ -244,6 +248,9 @@ int main( int argc, char **argv )
 	
 	// Cleanup LCD.
 	lcd.Stop();
+	
+	// Allow normal swapfile use.
+	munlockall();
 	
 	return 0;
 }

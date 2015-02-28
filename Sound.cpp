@@ -7,9 +7,8 @@ Sound::Sound( void )
 	Params = NULL;
 	Channels = 2;
 	Rate = 22050;
-	BufferFrames = 2048;
-	BufferSize = 8192;
-	Buffer = NULL;
+	BufferFrames = BufferSize / (2 * Channels);
+	PreBufferedFrames = 0;
 }
 
 Sound::~Sound()
@@ -26,13 +25,8 @@ void Sound::Start( void )
 	snd_pcm_hw_params_set_format( PCMHandle, Params, SND_PCM_FORMAT_S16_LE );
 	snd_pcm_hw_params_set_channels( PCMHandle, Params, Channels );
 	snd_pcm_hw_params_set_rate_near( PCMHandle, Params, &Rate, 0 );
-	BufferSize = BufferFrames * 2 * Channels;
 	snd_pcm_hw_params_set_buffer_size( PCMHandle, Params, BufferSize );
 	snd_pcm_hw_params( PCMHandle, Params );
-	
-	// Create the mixing buffer.
-	Buffer = (char*) malloc( BufferSize );
-	memset( Buffer, BufferSize, 0 );
 }
 
 void Sound::Stop( void )
@@ -40,7 +34,6 @@ void Sound::Stop( void )
 	// Cleanup audio.
 	snd_pcm_drain( PCMHandle );
 	snd_pcm_close( PCMHandle );
-	free( Buffer );
 }
 
 void Sound::Load( std::string filename )
@@ -66,57 +59,76 @@ void Sound::PlayLater( std::string filename, double secs, double volume )
 
 void Sound::Update( void )
 {
-	// If we have no playing or queued sounds, there's no need to do anything.
-	if( Playing.empty() )
-		return;
+	size_t buffered_frames = PreBufferedFrames;
 	
-	memset( Buffer, 0, BufferSize );
-	
-	// Fill the output buffer with mixed audio from all playing samples.
-	for( std::list<PlayingSound>::iterator playing_iter = Playing.begin(); playing_iter != Playing.end(); playing_iter ++ )
+	if( PreBufferedFrames < BufferFrames )
 	{
-		for( size_t i = 0; i < BufferFrames; i ++ )
-		{
-			double source_frame = playing_iter->CurrentFrame + (i * playing_iter->Sample->Rate / (double) Rate);
-			
-			for( size_t j = 0; j < Channels; j ++ )
-			{
-				double value = (((int16_t*) Buffer)[ i * Channels + j ]) / 32767. + playing_iter->Sample->ValueAt( (long) source_frame, j ) * playing_iter->Volume;
-				if( value > 1. )
-					((int16_t*) Buffer)[ i * Channels + j ] = 32767;
-				else if( value < -1. )
-					((int16_t*) Buffer)[ i * Channels + j ] = -32768;
-				else
-					((int16_t*) Buffer)[ i * Channels + j ] = value * 32767.;
-			}
-		}
-	}
-	
-	// Send data to the output buffer.
-	int wrote_frames = snd_pcm_writei( PCMHandle, Buffer, BufferFrames );
-	if( wrote_frames < 0 )
-		// Something went wrong, so make sure we can still play audio.
-		snd_pcm_prepare( PCMHandle );
-	else
-	{
-		// We successfully added some data to the output buffer.
+		// Zero any of the buffer we're about to mix into.
+		size_t pre_buffered_bytes = PreBufferedFrames * 2 * Channels;
+		memset( Buffer + pre_buffered_bytes, 0, BufferSize - pre_buffered_bytes );
+		
+		// Loop through all playing samples to mix audio for the buffer.
 		for( std::list<PlayingSound>::iterator playing_iter = Playing.begin(); playing_iter != Playing.end(); )
 		{
-			// Advance the position in each playing sound.
-			playing_iter->CurrentFrame += wrote_frames;
+			// Fill the unfilled part of the buffer.
+			for( size_t i = PreBufferedFrames; i < BufferFrames; i ++ )
+			{
+				double source_frame = playing_iter->CurrentFrame + ((i - PreBufferedFrames) * playing_iter->Sample->Rate / (double) Rate);
 			
+				for( size_t j = 0; j < Channels; j ++ )
+				{
+					double value = (((int16_t*) Buffer)[ i * Channels + j ]) / 32767. + playing_iter->Sample->ValueAt( (long) source_frame, j ) * playing_iter->Volume;
+					if( value > 1. )
+						((int16_t*) Buffer)[ i * Channels + j ] = 32767;
+					else if( value < -1. )
+						((int16_t*) Buffer)[ i * Channels + j ] = -32768;
+					else
+						((int16_t*) Buffer)[ i * Channels + j ] = value * 32767.;
+				}
+			}
+		
+			// FIXME: This could be more accurate if it checked how many frames the sample actually added.
+			buffered_frames = BufferFrames;
+		
+			// Advance the position in each playing sound.
+			playing_iter->CurrentFrame += BufferFrames - PreBufferedFrames;
+		
 			// Remove completed sounds from playback list.
 			if( playing_iter->CurrentFrame >= (long)( playing_iter->Sample->Frames ) )
 			{
 				std::list<PlayingSound>::iterator playing_iter_next = playing_iter;
 				playing_iter_next ++;
-				
+			
 				Playing.erase( playing_iter );
-				
+			
 				playing_iter = playing_iter_next;
 			}
 			else
 				playing_iter ++;
+		}
+	}
+	
+	if( buffered_frames )
+	{
+		// Send data to the ALSA buffer.
+		int wrote_frames = snd_pcm_writei( PCMHandle, Buffer, buffered_frames );
+		if( wrote_frames < 0 )
+		{
+			// Something went wrong, so make sure we can still play audio.
+			snd_pcm_prepare( PCMHandle );
+			
+			// Keep our entire audio buffer so we can re-send it next time.
+			PreBufferedFrames = buffered_frames;
+		}
+		else
+		{
+			// Keep any audio we already prepared that didn't make it into the ALSA buffer.
+			PreBufferedFrames = buffered_frames - wrote_frames;
+			if( PreBufferedFrames )
+			{
+				size_t pre_buffered_bytes = PreBufferedFrames * 2 * Channels;
+				memmove( Buffer, Buffer + (buffered_frames * 2 * Channels) - pre_buffered_bytes, pre_buffered_bytes );
+			}
 		}
 	}
 }
@@ -126,6 +138,7 @@ SoundSample::SoundSample( std::string filename )
 	Rate = 22050;
 	Channels = 1;
 	Frames = 0;
+	DataSize = 0;
 	Data = NULL;
 	
 	FILE *file = fopen( filename.c_str(), "rb" );
@@ -144,13 +157,13 @@ SoundSample::SoundSample( std::string filename )
 		ByteDepth = (bytes[ 0 ] + (bytes[ 1 ] * 256)) / 8;
 		fseek( file, 40, SEEK_SET );
 		fread( bytes, 1, 4, file );
-		size_t data_size = bytes[ 0 ] + (bytes[ 1 ] * 256) + (bytes[ 2 ] * 256*256) + (bytes[ 3 ] * 256*256*256);
-		Frames = data_size / (ByteDepth * Channels);
+		DataSize = bytes[ 0 ] + (bytes[ 1 ] * 256) + (bytes[ 2 ] * 256*256) + (bytes[ 3 ] * 256*256*256);
+		Frames = DataSize / (ByteDepth * Channels);
 		
-		// Read the sound data.
-		Data = malloc( data_size );
-		memset( Data, 0, data_size );
-		fread( Data, 1, data_size, file );
+		// Allocate a memory buffer and read the sound data into it.
+		Data = malloc( DataSize );
+		memset( Data, 0, DataSize );
+		fread( Data, 1, DataSize, file );
 		
 		fclose( file );
 		file = NULL;

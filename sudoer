@@ -1,2 +1,3 @@
 bomb ALL=(root) NOPASSWD:/srv/PiBomb/pibomb
+bomb ALL=(root) NOPASSWD:/usr/bin/nice
 bomb ALL=(root) NOPASSWD:/sbin/shutdown

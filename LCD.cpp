@@ -32,7 +32,7 @@ void LCD::Stop( void )
 		// Cleanup LCD.
 		SetText( 0, "" );
 		SetText( 1, "" );
-		SetBacklight( false );
+		SetBacklight( true );
 		RawLCD->close( RawLCD );
 		RawLCD = NULL;
 	}

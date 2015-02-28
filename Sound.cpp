@@ -70,10 +70,17 @@ void Sound::Update( void )
 		// Loop through all playing samples to mix audio for the buffer.
 		for( std::list<PlayingSound>::iterator playing_iter = Playing.begin(); playing_iter != Playing.end(); )
 		{
-			// Fill the unfilled part of the buffer.
-			for( size_t i = PreBufferedFrames; i < BufferFrames; i ++ )
+			// If this sound hadn't started yet, let it mix with the existing buffer.
+			size_t start_frame = playing_iter->CurrentFrame ? PreBufferedFrames : 0;
+			
+			// Stop at the end of the buffer or the end of the sample.
+			size_t frames_to_mix = std::min<size_t>( BufferFrames - start_frame, playing_iter->Sample->Frames - playing_iter->CurrentFrame );
+			size_t end_before_frame = start_frame + frames_to_mix;
+			
+			// Mix the sound into the buffer.
+			for( size_t i = start_frame; i < end_before_frame; i ++ )
 			{
-				double source_frame = playing_iter->CurrentFrame + ((i - PreBufferedFrames) * playing_iter->Sample->Rate / (double) Rate);
+				double source_frame = playing_iter->CurrentFrame + ((i - start_frame) * playing_iter->Sample->Rate / (double) Rate);
 			
 				for( size_t j = 0; j < Channels; j ++ )
 				{
@@ -86,13 +93,13 @@ void Sound::Update( void )
 						((int16_t*) Buffer)[ i * Channels + j ] = value * 32767.;
 				}
 			}
-		
-			// FIXME: This could be more accurate if it checked how many frames the sample actually added.
-			buffered_frames = BufferFrames;
-		
+			
+			// Keep track of the farthest we've mixed into this buffer.
+			buffered_frames = std::max<size_t>( buffered_frames, end_before_frame );
+			
 			// Advance the position in each playing sound.
-			playing_iter->CurrentFrame += BufferFrames - PreBufferedFrames;
-		
+			playing_iter->CurrentFrame += frames_to_mix;
+			
 			// Remove completed sounds from playback list.
 			if( playing_iter->CurrentFrame >= (long)( playing_iter->Sample->Frames ) )
 			{
